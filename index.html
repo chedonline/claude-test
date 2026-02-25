@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude CMS Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      padding: 48px 24px;
+      min-height: 100vh;
+    }
+
+    header {
+      max-width: 720px;
+      margin: 0 auto 48px;
+      border-bottom: 1px solid #2a2a2a;
+      padding-bottom: 24px;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      font-weight: 500;
+      color: #888;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    header p {
+      margin-top: 6px;
+      font-size: 0.85rem;
+      color: #444;
+    }
+
+    #content {
+      max-width: 720px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .entry {
+      display: grid;
+      grid-template-columns: 40px 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+      padding: 20px 0;
+      border-bottom: 1px solid #1e1e1e;
+    }
+
+    .entry:hover {
+      background: #141414;
+      margin: 0 -24px;
+      padding: 20px 24px;
+    }
+
+    .entry-id {
+      font-size: 0.75rem;
+      color: #333;
+      padding-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .entry-title {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #e8e8e8;
+    }
+
+    .entry-content {
+      font-size: 0.9rem;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    #status {
+      max-width: 720px;
+      margin: 0 auto 32px;
+      font-size: 0.8rem;
+      color: #333;
+    }
+
+    .loading { color: #555; }
+    .error { color: #c0392b; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>CMS Test — Google Sheets</h1>
+    <p>crookedpixels.com / claude-test</p>
+  </header>
+
+  <div id="status" class="loading">Fetching sheet...</div>
+  <div id="content"></div>
+
+  <script>
+    const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBERIWzlgOR3TTRwmZPyw3wX8q24OklfiInHROzFByVMds1KMpUb8UMTiwtYTCbZbV_yzL6TNeo9Fy/pub?gid=0&single=true&output=csv";
+
+    function parseCSV(text) {
+      const lines = text.trim().split("\n");
+      const headers = lines[0].split(",").map(h => h.trim());
+      return lines.slice(1).map(line => {
+        const values = line.split(",").map(v => v.trim());
+        return headers.reduce((obj, h, i) => {
+          obj[h] = values[i] || "";
+          return obj;
+        }, {});
+      });
+    }
+
+    async function loadSheet() {
+      const status = document.getElementById("status");
+      const content = document.getElementById("content");
+
+      try {
+        const res = await fetch(SHEET_URL);
+        if (!res.ok) throw new Error("Fetch failed");
+        const text = await res.text();
+        const rows = parseCSV(text).filter(r => r.ID); // skip empty rows
+
+        status.textContent = `${rows.length} entries loaded`;
+
+        content.innerHTML = rows.map(row => `
+          <div class="entry">
+            <span class="entry-id">${row.ID}</span>
+            <span class="entry-title">${row["Test title"] || ""}</span>
+            <span class="entry-content">${row["Dummy content"] || ""}</span>
+          </div>
+        `).join("");
+
+      } catch (err) {
+        status.className = "error";
+        status.textContent = "Error loading sheet. Check CORS or publish settings.";
+        console.error(err);
+      }
+    }
+
+    loadSheet();
+  </script>
+
+</body>
+</html>
