@@ -46,7 +46,7 @@
 
     .entry {
       display: grid;
-      grid-template-columns: 40px 1fr 1fr;
+      grid-template-columns: 80px 1fr;
       gap: 24px;
       align-items: start;
       padding: 20px 0;
@@ -59,10 +59,30 @@
       padding: 20px 24px;
     }
 
+    .entry-image {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #1a1a1a;
+    }
+
+    .entry-image-placeholder {
+      width: 80px;
+      height: 80px;
+      border-radius: 6px;
+      background: #1a1a1a;
+    }
+
+    .entry-body {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
     .entry-id {
       font-size: 0.75rem;
       color: #333;
-      padding-top: 3px;
       font-variant-numeric: tabular-nums;
     }
 
@@ -85,7 +105,6 @@
       color: #333;
     }
 
-    .loading { color: #555; }
     .error { color: #c0392b; }
   </style>
 </head>
@@ -96,17 +115,58 @@
     <p>crookedpixels.com / claude-test</p>
   </header>
 
-  <div id="status" class="loading">Fetching sheet...</div>
+  <div id="status">Fetching sheet...</div>
   <div id="content"></div>
 
   <script>
     const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBERIWzlgOR3TTRwmZPyw3wX8q24OklfiInHROzFByVMds1KMpUb8UMTiwtYTCbZbV_yzL6TNeo9Fy/pub?gid=0&single=true&output=csv";
 
+    // Proper CSV parser — handles quoted fields, commas inside quotes, URLs
     function parseCSV(text) {
-      const lines = text.trim().split("\n");
-      const headers = lines[0].split(",").map(h => h.trim());
+      const lines = [];
+      let cur = "";
+      let inQuotes = false;
+
+      // First split into lines respecting quoted newlines
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '"') {
+          inQuotes = !inQuotes;
+          cur += ch;
+        } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+          if (cur.trim()) lines.push(cur);
+          cur = "";
+          if (ch === '\r' && text[i+1] === '\n') i++; // skip \r\n
+        } else {
+          cur += ch;
+        }
+      }
+      if (cur.trim()) lines.push(cur);
+
+      // Parse each line into fields
+      function parseLine(line) {
+        const fields = [];
+        let field = "";
+        let inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            if (inQ && line[i+1] === '"') { field += '"'; i++; } // escaped quote
+            else inQ = !inQ;
+          } else if (ch === ',' && !inQ) {
+            fields.push(field.trim());
+            field = "";
+          } else {
+            field += ch;
+          }
+        }
+        fields.push(field.trim());
+        return fields;
+      }
+
+      const headers = parseLine(lines[0]);
       return lines.slice(1).map(line => {
-        const values = line.split(",").map(v => v.trim());
+        const values = parseLine(line);
         return headers.reduce((obj, h, i) => {
           obj[h] = values[i] || "";
           return obj;
@@ -122,15 +182,21 @@
         const res = await fetch(SHEET_URL);
         if (!res.ok) throw new Error("Fetch failed");
         const text = await res.text();
-        const rows = parseCSV(text).filter(r => r.ID); // skip empty rows
+        const rows = parseCSV(text).filter(r => r.ID);
 
         status.textContent = `${rows.length} entries loaded`;
 
         content.innerHTML = rows.map(row => `
           <div class="entry">
-            <span class="entry-id">${row.ID}</span>
-            <span class="entry-title">${row["Test title"] || ""}</span>
-            <span class="entry-content">${row["Dummy content"] || ""}</span>
+            ${row["Image URL"]
+              ? `<img class="entry-image" src="${row["Image URL"]}" alt="${row["Test title"]}" />`
+              : `<div class="entry-image-placeholder"></div>`
+            }
+            <div class="entry-body">
+              <span class="entry-id">${row.ID}</span>
+              <span class="entry-title">${row["Test title"] || ""}</span>
+              <span class="entry-content">${row["Dummy content"] || ""}</span>
+            </div>
           </div>
         `).join("");
 
